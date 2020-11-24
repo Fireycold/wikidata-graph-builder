@@ -1,160 +1,218 @@
-FormCtrl = ($scope, $log, $location, $rootScope, $mdToast, $mdDialog, WikiToolsService, SparqlGenService) ->
-  @modes =
-    forward: 'Forward'
-    reverse: 'Reverse'
-    both: 'Bidirectional'
-    undirected: 'Undirected'
+/*
+ * decaffeinate suggestions:
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS103: Rewrite code to no longer use __guard__, or convert again using --optional-chaining
+ * DS205: Consider reworking code to avoid use of IIFEs
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+const FormCtrl = function($scope, $log, $location, $rootScope, $mdToast, $mdDialog, WikiToolsService, SparqlGenService) {
+  let key, value;
+  this.modes = {
+    forward: 'Forward',
+    reverse: 'Reverse',
+    both: 'Bidirectional',
+    undirected: 'Undirected',
     wdqs: 'WDQS'
+  };
 
-  fields =
-    property: type: 'property'
-    item: type: 'item'
-    lang: type: 'lang', default: 'en'
-    iterations: type: 'number', default: 0
-    limit: type: 'number', default: 0
-    mode: type: 'enum', values: @modes, default: 'forward', extractor: (params) -> params.mode || params.direction
-    wdqs: type: 'text'
-    size_property: type: 'property'
-    size_recursive: type: 'boolean'
-    size_log_scale: type: 'boolean'
+  const fields = {
+    property: { type: 'property'
+  },
+    item: { type: 'item'
+  },
+    lang: { type: 'lang', default: 'en'
+  },
+    iterations: { type: 'number', default: 0
+  },
+    limit: { type: 'number', default: 0
+  },
+    mode: { type: 'enum', values: this.modes, default: 'forward', extractor(params) { return params.mode || params.direction; }
+  },
+    wdqs: { type: 'text'
+  },
+    size_property: { type: 'property'
+  },
+    size_recursive: { type: 'boolean'
+  },
+    size_log_scale: { type: 'boolean'
+  }
+  };
 
-  getDataFromUrl = () ->
-    params = $location.search()
-    data = {}
+  const getDataFromUrl = function() {
+    const params = $location.search();
+    const data = {};
 
-    for field, spec of fields
-      param = if spec.extractor then spec.extractor(params) else params[field]
-      data[field] = switch spec.type
-        when 'property' then (if /^P\d+$/.test(param or '') then param else spec.default)
-        when 'item' then (if /^Q\d+$/.test(param or '') then param else spec.default)
-        when 'lang' then (if /^[a-z-]{2,}$/.test(param or '') then param else spec.default)
-        when 'number' then (if /^\d+$/.test(param or '') then parseInt(param) else spec.default)
-        when 'text' then param || spec.default
-        when 'enum' then (if spec.values[param] then param else spec.default)
-        when 'boolean' then param in [1, true, '1', 'true']
+    for (let field in fields) {
+      var spec = fields[field];
+      var param = spec.extractor ? spec.extractor(params) : params[field];
+      data[field] = (() => { switch (spec.type) {
+        case 'property': if (/^P\d+$/.test(param || '')) { return param; } else { return spec.default; }
+        case 'item': if (/^Q\d+$/.test(param || '')) { return param; } else { return spec.default; }
+        case 'lang': if (/^[a-z-]{2,}$/.test(param || '')) { return param; } else { return spec.default; }
+        case 'number': if (/^\d+$/.test(param || '')) { return parseInt(param); } else { return spec.default; }
+        case 'text': return param || spec.default;
+        case 'enum': if (spec.values[param]) { return param; } else { return spec.default; }
+        case 'boolean': return [1, true, '1', 'true'].includes(param);
+      } })();
+    }
 
-    data.wdqs = SparqlGenService.generate data if not data.wdqs
-    data
+    if (!data.wdqs) { data.wdqs = SparqlGenService.generate(data); }
+    return data;
+  };
 
-  dynamicFields = (key for key, value of fields when value.type in ['item', 'property'])
+  const dynamicFields = ((() => {
+    const result = [];
+    for (key in fields) {
+      value = fields[key];
+      if (['item', 'property'].includes(value.type)) {
+        result.push(key);
+      }
+    }
+    return result;
+  })());
 
-  dynamicFields.forEach (ob) =>
-    $scope.$watch (=> @[ob]), (name) =>
-      return @[ob + 'Object'] = @[ob + 'Text'] = undefined if not name
-      WikiToolsService.getEntity(name, @lang).then((result) => @[ob + 'Object'] = result)
+  dynamicFields.forEach(ob => {
+    return $scope.$watch((() => this[ob]), name => {
+      if (!name) { return this[ob + 'Object'] = (this[ob + 'Text'] = undefined); }
+      return WikiToolsService.getEntity(name, this.lang).then(result => { return this[ob + 'Object'] = result; });
+    });
+  });
 
-  $scope.$watch (=> @lang), (lang) =>
-    return if not lang
-    dynamicFields.forEach (name) =>
-      obname = name + 'Object'
-      if @[obname] and @[obname].lang isnt lang
-        @[obname].lang = lang
-        WikiToolsService.getEntity(@[obname].id, lang).then((result) => @[obname] = result if @[obname].lang is lang)
+  $scope.$watch((() => this.lang), lang => {
+    if (!lang) { return; }
+    return dynamicFields.forEach(name => {
+      const obname = name + 'Object';
+      if (this[obname] && (this[obname].lang !== lang)) {
+        this[obname].lang = lang;
+        return WikiToolsService.getEntity(this[obname].id, lang).then(result => { if (this[obname].lang === lang) { return this[obname] = result; } });
+      }
+    });
+  });
 
-  rebuildFromUrl = () =>
-    data = getDataFromUrl()
-    for key, value of data
-      @[key] = value
-      @[key + 'Object'] = @[key + 'Text'] = undefined if not value and fields[key].type in ['item', 'property']
-    @graphData = undefined if not @validate()
-    regenSvg(data) if data.wdqs
-    return
+  const rebuildFromUrl = () => {
+    const data = getDataFromUrl();
+    for (key in data) {
+      value = data[key];
+      this[key] = value;
+      if (!value && ['item', 'property'].includes(fields[key].type)) { this[key + 'Object'] = (this[key + 'Text'] = undefined); }
+    }
+    if (!this.validate()) { this.graphData = undefined; }
+    if (data.wdqs) { regenSvg(data); }
+  };
 
-  $rootScope.$on '$locationChangeSuccess', rebuildFromUrl
+  $rootScope.$on('$locationChangeSuccess', rebuildFromUrl);
 
-  @itemSearch = (query) -> WikiToolsService.searchEntities 'item', query, @lang
-  @propertySearch = (query) -> WikiToolsService.searchEntities 'property', query, @lang
-  @reset = -> $location.search({})
-  @validate = -> @mode is 'wdqs' and @wdqs or @mode isnt 'wdqs' and @lang and @itemObject and @propertyObject
+  this.itemSearch = function(query) { return WikiToolsService.searchEntities('item', query, this.lang); };
+  this.propertySearch = function(query) { return WikiToolsService.searchEntities('property', query, this.lang); };
+  this.reset = () => $location.search({});
+  this.validate = function() { return ((this.mode === 'wdqs') && this.wdqs) || ((this.mode !== 'wdqs') && this.lang && this.itemObject && this.propertyObject); };
 
-  @submit = ->
-    data = {}
+  this.submit = function() {
+    const data = {};
 
-    if @mode is 'wdqs'
-      data.mode = 'wdqs'
-      data.wdqs = @wdqs
-    else
-      for field, spec of fields when field isnt 'wdqs'
-        if spec.type in ['item', 'property']
-          data[field] = @[field + 'Object']?.id or spec.default
-        else if spec.type is 'boolean'
-          data[field] = ~~@[field] unless @[field] is !!spec.default
-        else
-          data[field] = @[field] unless @[field] is spec.default
+    if (this.mode === 'wdqs') {
+      data.mode = 'wdqs';
+      data.wdqs = this.wdqs;
+    } else {
+      for (let field in fields) {
+        const spec = fields[field];
+        if (field !== 'wdqs') {
+          if (['item', 'property'].includes(spec.type)) {
+            data[field] = __guard__(this[field + 'Object'], x => x.id) || spec.default;
+          } else if (spec.type === 'boolean') {
+            if (this[field] !== !!spec.default) { data[field] = ~~this[field]; }
+          } else {
+            if (this[field] !== spec.default) { data[field] = this[field]; }
+          }
+        }
+      }
+    }
 
-    if JSON.stringify($location.search()) is JSON.stringify(data) then rebuildFromUrl() else $location.search data
+    if (JSON.stringify($location.search()) === JSON.stringify(data)) { return rebuildFromUrl(); } else { return $location.search(data); }
+  };
 
-  errorToast = (message, more) ->
-    toast = $mdToast.simple().textContent(message).hideDelay(5000)
-    if more
-      toast.action('More info').highlightAction(true)
-    toast = $mdToast.show(toast).then (response) =>
-      if more and response is 'ok'
-        tpl = angular.element("<md-dialog />")
+  const errorToast = function(message, more) {
+    let toast = $mdToast.simple().textContent(message).hideDelay(5000);
+    if (more) {
+      toast.action('More info').highlightAction(true);
+    }
+    return toast = $mdToast.show(toast).then(response => {
+      if (more && (response === 'ok')) {
+        const tpl = angular.element("<md-dialog />")
                      .attr('aria-label', message)
-                     .append(angular.element("<pre />").text(more))
-        $mdDialog.show
-          clickOutsideToClose: true
+                     .append(angular.element("<pre />").text(more));
+        return $mdDialog.show({
+          clickOutsideToClose: true,
           template: tpl[0].outerHTML
+        });
+      }
+    });
+  };
 
-  regenSvg = (data) =>
-    query = data.wdqs
-    start_time = new Date().getTime()
+  var regenSvg = data => {
+    const query = data.wdqs;
+    const start_time = new Date().getTime();
 
-    insertSuccess = (response) =>
-      @isLoading = false
-      @activeItem = data.item
-      @graphData = response.data
+    const insertSuccess = response => {
+      this.isLoading = false;
+      this.activeItem = data.item;
+      return this.graphData = response.data;
+    };
 
-    insertError = (response) =>
-      @isLoading = false
-      $log.error 'unable to process answer', response.data
-      request_time = new Date().getTime() - start_time
-      if request_time < 10*1000
-        errorToast 'Something is wrong with SPARQL query syntax', response.data
-      else
-        errorToast 'SPARQL query times out'
-      return
+    const insertError = response => {
+      this.isLoading = false;
+      $log.error('unable to process answer', response.data);
+      const request_time = new Date().getTime() - start_time;
+      if (request_time < (10*1000)) {
+        errorToast('Something is wrong with SPARQL query syntax', response.data);
+      } else {
+        errorToast('SPARQL query times out');
+      }
+    };
 
-    @isLoading = true
-    WikiToolsService.wdqs(query).then(insertSuccess, insertError)
+    this.isLoading = true;
+    WikiToolsService.wdqs(query).then(insertSuccess, insertError);
 
-    @showSvg = true
-    return
+    this.showSvg = true;
+  };
 
-  @query = ->
-    data = getDataFromUrl()
-    window.open 'https://query.wikidata.org/#' + encodeURIComponent data.wdqs
-    return
+  this.query = function() {
+    const data = getDataFromUrl();
+    window.open('https://query.wikidata.org/#' + encodeURIComponent(data.wdqs));
+  };
 
-  @svg = ->
-    serializer = new XMLSerializer()
-    source = serializer.serializeToString $('svg')[0]
-    source = '<?xml version="1.0" standalone="no"?>\r\n' + source
-    url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent source
-    window.open url
-    return
+  this.svg = function() {
+    const serializer = new XMLSerializer();
+    let source = serializer.serializeToString($('svg')[0]);
+    source = '<?xml version="1.0" standalone="no"?>\r\n' + source;
+    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(source);
+    window.open(url);
+  };
 
-  @list = ->
-    data = getDataFromUrl()
-    url = "https://tools.wmflabs.org/wikidata-todo/tree.html?q=#{data.item.slice 1}"
-    url += "&rp=#{data.property.slice 1}" if data.mode in ['reverse', 'both']
-    url += "&p=#{data.property.slice 1}" if data.mode in ['forward', 'both']
-    url += "&depth=#{data.iterations}" unless data.iterations is 0
-    url += "&lang=#{data.lang}" unless data.lang is 'en'
-    window.open url
-    return
-  return
+  this.list = function() {
+    const data = getDataFromUrl();
+    let url = `https://tools.wmflabs.org/wikidata-todo/tree.html?q=${data.item.slice(1)}`;
+    if (['reverse', 'both'].includes(data.mode)) { url += `&rp=${data.property.slice(1)}`; }
+    if (['forward', 'both'].includes(data.mode)) { url += `&p=${data.property.slice(1)}`; }
+    if (data.iterations !== 0) { url += `&depth=${data.iterations}`; }
+    if (data.lang !== 'en') { url += `&lang=${data.lang}`; }
+    window.open(url);
+  };
+};
 
 FormCtrl.$inject = [
   '$scope', '$log', '$location', '$rootScope', '$mdToast', '$mdDialog', 'WikiToolsService', 'SparqlGenService'
-]
+];
 
-app = angular.module 'WgbApp', ['ngMaterial', 'WikiTools', 'Graph', 'SparqlGen']
+const app = angular.module('WgbApp', ['ngMaterial', 'WikiTools', 'Graph', 'SparqlGen']);
 
-app.config ['$locationProvider', ($locationProvider) ->
-  $locationProvider.html5Mode enabled: true, requireBase: false
-  return
-]
+app.config(['$locationProvider', function($locationProvider) {
+  $locationProvider.html5Mode({enabled: true, requireBase: false});
+}
+]);
 
-app.controller 'FormCtrl', FormCtrl
+app.controller('FormCtrl', FormCtrl);
+
+function __guard__(value, transform) {
+  return (typeof value !== 'undefined' && value !== null) ? transform(value) : undefined;
+}
